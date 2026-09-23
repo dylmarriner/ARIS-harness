@@ -4,12 +4,13 @@
   // consumers — tsx running scripts/ (no nearer tsconfig)
   // resolves workspace imports through this file. `files: []` keeps it
   // program-less, so the host/client cordis Context merges never meet.
-  // NEVER add include/files entries, and NEVER flatten this solution into a
-  // single ts.Program (scripts seed tsconfig.host.json or tsconfig.client.json).
+  // ARIS runtime is a third isolated project boundary so it participates in
+  // whole-repo solution builds without merging host/client Cordis contexts.
   "extends": "./tsconfig.base.json",
   "files": [],
   "references": [
     { "path": "./tsconfig.host.json" },
-    { "path": "./tsconfig.client.json" }
+    { "path": "./tsconfig.client.json" },
+    { "path": "./packages/aris/runtime" }
   ]
 }
