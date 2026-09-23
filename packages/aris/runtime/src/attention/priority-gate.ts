@@ -34,18 +34,22 @@ export class PriorityAttentionGate implements AttentionGate {
     }
   }
 
-  async shouldProcess(event: RuntimeEvent, _session: SessionSnapshot): Promise<boolean> {
-    if (this.ignoredTypes.has(event.type)) return false
-    if (event.priority === 'critical') return true
-    if (PRIORITY_RANK[event.priority] < PRIORITY_RANK[this.minimumPriority]) return false
+  shouldProcess(event: RuntimeEvent, _session: SessionSnapshot): Promise<boolean> {
+    if (this.ignoredTypes.has(event.type)) return Promise.resolve(false)
+    if (event.priority === 'critical') return Promise.resolve(true)
+    if (PRIORITY_RANK[event.priority] < PRIORITY_RANK[this.minimumPriority]) {
+      return Promise.resolve(false)
+    }
 
     const key = `${event.source}\u0000${event.type}`
     const parsed = Date.parse(event.occurredAt)
     const now = Number.isFinite(parsed) ? parsed : Date.now()
     const previous = this.lastAccepted.get(key)
-    if (previous !== undefined && now - previous < this.cooldownMs) return false
+    if (previous !== undefined && now - previous < this.cooldownMs) {
+      return Promise.resolve(false)
+    }
 
     this.lastAccepted.set(key, now)
-    return true
+    return Promise.resolve(true)
   }
 }
