@@ -20,10 +20,11 @@ export class MemoryAuditSink implements AuditSink {
     }
   }
 
-  async append(record: AuditRecord): Promise<void> {
+  append(record: AuditRecord): Promise<void> {
     this.records.push(record)
     const overflow = this.records.length - this.maxRecords
     if (overflow > 0) this.records.splice(0, overflow)
+    return Promise.resolve()
   }
 
   snapshot(): readonly AuditRecord[] {
