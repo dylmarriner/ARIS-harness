@@ -11,7 +11,7 @@ export class DshApprovalBridge implements ApprovalRequester {
     private readonly agent: Agent,
   ) {}
 
-  async request(action: Action, reason: string): Promise<ApprovalOutcome> {
+  request(action: Action, reason: string): Promise<ApprovalOutcome> {
     return this.approval.request({
       agent: this.agent,
       toolName: action.tool ?? action.capability,
