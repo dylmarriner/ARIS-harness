@@ -26,7 +26,7 @@ export async function runLineProcess(
     stdoutBuffer = lines.pop() ?? ''
     for (const line of lines) {
       if (line.length === 0) continue
-      pending = pending.then(async () => onLine(line))
+      pending = pending.then(() => Promise.resolve(onLine(line)))
     }
   })
   child.stderr.on('data', (chunk: string) => {
