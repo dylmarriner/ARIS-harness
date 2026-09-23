@@ -18,41 +18,45 @@ export class FilesystemEventSource implements RuntimeEventSource {
   async run(publish: RuntimeEventPublisher, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted()
     let watcher: FSWatcher | undefined
+    let abort: (() => void) | undefined
 
-    await new Promise<void>((resolve, reject) => {
-      const abort = (): void => {
-        watcher?.close()
-        resolve()
-      }
-      signal?.addEventListener('abort', abort, { once: true })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        abort = (): void => {
+          watcher?.close()
+          resolve()
+        }
+        signal?.addEventListener('abort', abort, { once: true })
 
-      try {
-        watcher = watch(
-          this.options.path,
-          { recursive: this.options.recursive ?? false },
-          (eventType, filename) => {
-            void publish({
-              id: globalThis.crypto.randomUUID(),
-              type: 'linux.filesystem.change',
-              source: this.id,
-              occurredAt: new Date().toISOString(),
-              priority: 'normal',
-              payload: {
-                root: this.options.path,
-                eventType,
-                filename: filename?.toString() ?? null,
-              },
-            }).catch(reject)
-          },
-        )
-        watcher.once('error', reject)
-        watcher.once('close', resolve)
-      } catch (error) {
-        reject(error)
-      }
-    }).finally(() => {
-      signal?.removeEventListener('abort', () => {})
+        try {
+          watcher = watch(
+            this.options.path,
+            { recursive: this.options.recursive ?? false },
+            (eventType, filename) => {
+              const published = publish({
+                id: globalThis.crypto.randomUUID(),
+                type: 'linux.filesystem.change',
+                source: this.id,
+                occurredAt: new Date().toISOString(),
+                priority: 'normal',
+                payload: {
+                  root: this.options.path,
+                  eventType,
+                  filename: filename?.toString() ?? null,
+                },
+              })
+              void Promise.resolve(published).catch(reject)
+            },
+          )
+          watcher.once('error', reject)
+          watcher.once('close', resolve)
+        } catch (error) {
+          reject(error)
+        }
+      })
+    } finally {
+      if (abort !== undefined) signal?.removeEventListener('abort', abort)
       watcher?.close()
-    })
+    }
   }
 }
