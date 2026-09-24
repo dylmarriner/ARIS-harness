@@ -1,8 +1,10 @@
 # ARIS Harness Technical Blueprint and Phased Roadmap
 
-**Repository:** `dylmarriner/ARIS-harness`
-**Role:** Persistent cognitive runtime and integration harness for ARIS
-**Cross-repo authority:** `dylmarriner/ARIS/docs/ARIS_MASTER_TECHNICAL_BLUEPRINT.md`
+- **Repository:** `dylmarriner/ARIS-harness`
+- **Role:** Persistent cognitive runtime and integration harness for ARIS
+- **Cross-repo authority:** `dylmarriner/ARIS/docs/ARIS_MASTER_TECHNICAL_BLUEPRINT.md`
+- **Sibling repositories:** `dylmarriner/ARIS` (ARIS OS: eventd, modeld, system executor, memory gateway) and `dylmarriner/ARIS-intelligence` (native model, served through llama.cpp)
+- **Status as of 2026-09-24:** see [§23 Cross-repository integration contracts](#23-cross-repository-integration-contracts) and [§24 Phased roadmap and status](#24-phased-roadmap-and-status)
 
 ## 1. Mission
 
@@ -254,6 +256,8 @@ Critical deterministic events may bypass learned attention.
 
 Attention emits a clean cognition wake-up signal rather than directly invoking a model.
 
+The event stream comes from ARIS OS `aris-eventd`, not from Harness-owned OS adapters (see §23). `EventdIngestor` normalizes eventd envelopes and `AttentionGate` applies priority threshold, goal relevance, per-key cooldown and critical bypass without inference.
+
 ## 10. Scheduler
 
 Scheduler owns:
@@ -305,7 +309,7 @@ Provider interface should expose properties such as:
 
 Expected providers include:
 
-- ARIS native model.
+- ARIS native model, reached through ARIS OS `aris-modeld` (`ModeldModelProvider`) or directly through the ARIS Intelligence llama.cpp server (`OpenAICompatibleModelProvider`).
 - llama.cpp.
 - Ollama.
 - LM Studio.
@@ -316,6 +320,8 @@ Expected providers include:
 - Gemini.
 
 Do not encode provider brands into planning logic.
+
+`ModelRouter` selects providers by required features, locality and context size, calls only providers whose `model:<id>` capability is healthy, falls back on provider failure, and audits every attempt.
 
 ## 13. Agent architecture
 
@@ -524,9 +530,39 @@ Maintain an explicit audit for:
 
 ARIS-specific packages must be excluded from inherited DeepSeek publication rules unless deliberately published as ARIS packages. Never falsify repository metadata to satisfy an upstream release gate.
 
-## 23. Phased roadmap
+## 23. Cross-repository integration contracts
+
+Harness integrates with contracts that already exist in code in the sibling repositories. Where the master blueprint names a contract that has no implementation yet, Harness adopts the implemented format and records the gap here instead of inventing a parallel wire format.
+
+### 23.1 Contracts in use
+
+| Contract | Owner | Transport | Harness consumer | State |
+| --- | --- | --- | --- | --- |
+| `EventEnvelope` v1 (`@aris/contracts`) | ARIS `aris-eventd` | NATS JetStream stream `ARIS_EVENTS`, subjects `aris.v1.<type>` | `EventdIngestor` | Implemented; NATS client wiring is deferred to the service phase |
+| `WorldStateSnapshot` v1 | ARIS `aris-eventd` | File `/var/lib/aris/eventd/world-state.json` | `loadWorldStateSnapshot`, `applyWorldStateSnapshot` | Implemented |
+| modeld invoke API (`ModelDescriptor` v1, `ModelInvocationResult`) | ARIS `aris-modeld` | HTTP over `/run/aris/modeld/modeld.sock`: `GET /v1/health`, `GET /v1/models`, `POST /v1/invoke` | `ModeldModelProvider` | Implemented |
+| OpenAI chat completions | ARIS Intelligence llama.cpp server; any compatible backend | HTTP `{baseUrl}/chat/completions`, `{baseUrl}/models` | `OpenAICompatibleModelProvider` | Implemented; interim native-model protocol until ARIS Intelligence I1 publishes one |
+| `ActionRequest` / `ActionExecutionResult` | ARIS `aris-system-executor` | Not defined | Planned Harness executor tool (H6) | Blocked on ARIS A2 |
+| `MemoryQuery` / `JournalEvent` / `MemoryCandidate` | SCOS Memory via ARIS `aris-memory-gateway` | Not defined | Planned `MemoryPort` client (H7) | Blocked on ARIS A5 |
+| Gateway task/approval/status API | Harness | Not defined | Shell via ARIS gateway | Unassigned; Harness proposes it in the service phase |
+
+### 23.2 Reconciliation decisions
+
+1. **Wire casing and envelope fields.** Implemented ARIS contracts use camelCase with `schemaVersion: "v1"`, `eventId`, `correlationId`, `causationId`, and `producer`. The master blueprint's snake_case `schema_version`, `request_id`, `trace_id`, `source` fields map onto those names. Harness follows the implemented format; the master blueprint should be updated to match.
+2. **Linux event adapters belong to ARIS OS.** `aris-eventd` already implements procfs, systemd, journald, udev, sysfs, NetworkManager, mounts, and logind adapters and has been checked on real hardware. Harness consumes `aris.v1.>` and does not read OS sources. The adapters on the closed `feat/native-harness-skeleton` branch are retired.
+3. **Native model path.** The native model is reached through `aris-modeld` when ARIS OS runs it and directly through the ARIS Intelligence llama.cpp server in development. modeld defaults its upstream to `http://127.0.0.1:11434/v1` (Ollama) while ARIS Intelligence serves llama.cpp on `http://127.0.0.1:8080`; deployments running the native model set `ARIS_MODELD_UPSTREAM_URL=http://127.0.0.1:8080/v1`.
+4. **Runtime context format.** Harness sends structured context as the `aris_state_context` user message wrapped in `<ARIS_STATE_CONTEXT>`, the format ARIS's in-repo state pack already uses, so the native model sees one format regardless of caller.
+5. **Escalation ownership.** Harness owns escalation across models, agents, and nodes. ARIS Intelligence compute levels (`DIRECT` through `EXHAUSTIVE`) stay within the native model; its README ladder levels L6–L9 and its `allow_web` / `allow_a2a` budget flags should defer to Harness routing.
+6. **Cognition ownership.** ARIS `packages/intelligence` (router, context compiler, state pack, authorizer) and the core-api task state machine overlap with the Harness Executive and router. ARIS phase A0 migrates those responsibilities to Harness; until then ARIS contracts remain authoritative for how Harness capabilities enter ARIS.
+7. **Impact vocabulary.** Harness `ImpactLevel` (`read`, `write`, `privileged`, `external`) must map onto the master blueprint classes (`READ`, `WRITE`, `PRIVILEGED`, `EXTERNAL`, `IRREVERSIBLE`) and ARIS `RiskClass` with autonomy levels 1–7 before the executor integration (H6). `IRREVERSIBLE` has no Harness equivalent yet.
+8. **Memory outbox.** The durable outbox for memory outages belongs to ARIS `aris-memory-gateway`; Harness keeps no second permanent memory store.
+9. **Service names.** Harness runs as `aris-harness.service` and calls the executor `aris-system-executor`, the master blueprint names; ARIS documents that say `aris-system-agent` or `aris-systemd.service` should converge on them.
+
+## 24. Phased roadmap and status
 
 ### H0 - Upstream audit and fork policy
+
+**Status:** partial. The `packages/aris/*` publication policy is enforced by `check-workspace-constraints`; the `upstream` remote exists. The KEEP/WRAP/REPLACE/DROP audit is not written.
 
 - inventory inherited subsystems.
 - classify KEEP/WRAP/REPLACE/DROP.
@@ -536,6 +572,8 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 **Exit:** every retained inherited subsystem has an explicit reason and owner.
 
 ### H1 - Native runtime foundation
+
+**Status:** implemented in `packages/aris/runtime` with 100% coverage; `feat/h1-runtime-foundation` awaits merge to `master`.
 
 - typed contracts.
 - RuntimeSession.
@@ -551,17 +589,19 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 
 ### H2 - Persistent event runtime
 
-- journald/systemd.
-- NetworkManager.
-- filesystem.
-- D-Bus/udev/procfs/sysfs adapters.
+**Status:** partial. `EventdIngestor`, `AttentionGate`, and eventd world-state seeding are implemented. The NATS subscription, a live-event state reducer, scheduler, presence and resource manager are not.
+
+- consume `aris-eventd` envelopes from NATS `aris.v1.>` (ARIS owns the journald, systemd, NetworkManager, filesystem, D-Bus, udev, procfs and sysfs adapters).
+- seed the belief graph from the eventd world-state checkpoint.
 - attention/coalescing.
-- state reducer.
+- state reducer that applies live events to the belief graph.
 - scheduler/presence/resource manager.
 
 **Exit:** high-volume OS awareness works without inference per event.
 
 ### H3 - Durable runtime state and recovery
+
+**Status:** not started.
 
 - checkpoint persistence.
 - task/goal recovery.
@@ -572,6 +612,8 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 **Exit:** crash/restart can resume or explicitly terminate prior work.
 
 ### H4 - Cognition, planning and context
+
+**Status:** not started. Structured `ModelRequest` context, history, tools and response schemas are in place for the cognition loop to use.
 
 - persistent cognition loop.
 - dependency-aware planner.
@@ -584,6 +626,8 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 
 ### H5 - Model and agent routing
 
+**Status:** partial. `ModeldModelProvider` (ARIS OS) and `OpenAICompatibleModelProvider` (ARIS Intelligence llama.cpp and compatible backends) route through the health-aware `ModelRouter`. Agent adapters, ACP/A2A, and cost-aware routing are not started.
+
 - native ARIS provider.
 - local model backends.
 - API providers.
@@ -594,6 +638,8 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 **Exit:** specialists can be swapped without changing Executive semantics.
 
 ### H6 - Secure execution
+
+**Status:** not started beyond `ApprovalPolicyEngine` and `DshApprovalBridge`. Blocked on the ARIS A2 executor protocol.
 
 - scoped permission service.
 - secret references.
@@ -607,6 +653,8 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 
 ### H7 - Memory and world-model persistence
 
+**Status:** not started. Blocked on the ARIS A5 memory gateway protocol.
+
 - SCOS Memory adapter.
 - provenance.
 - belief persistence/reconstruction.
@@ -616,6 +664,8 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 **Exit:** ARIS explains where material beliefs came from and survives runtime restart.
 
 ### H8 - Skills, replay and self-improvement
+
+**Status:** not started.
 
 - trace capture/replay.
 - evaluation suite.
@@ -627,6 +677,8 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 
 ### H9 - Distributed ARIS
 
+**Status:** not started.
+
 - node identities.
 - authenticated communication.
 - remote capabilities.
@@ -636,22 +688,24 @@ ARIS-specific packages must be excluded from inherited DeepSeek publication rule
 
 **Exit:** one task uses another node and returns into the same logical ARIS session without transferring global authority.
 
-## 24. Harness v0.1 acceptance criteria
+## 25. Harness v0.1 acceptance criteria
 
 Harness v0.1 requires:
 
-1. ARIS runtime included in normal workspace build/test gates.
-2. complete Executive action chain.
-3. real Linux event ingestion with attention/state updates.
-4. persistent task/checkpoint recovery.
-5. one native/local model provider.
-6. one external model or agent provider through the same routing architecture.
-7. SCOS Memory connected through `MemoryPort`.
-8. one privileged OS action via ARIS System Executor.
-9. trace/audit reconstruction of why the action occurred.
-10. provider swap does not alter ARIS authority semantics.
+| # | Criterion | Status |
+| --- | --- | --- |
+| 1 | ARIS runtime included in normal workspace build/test gates. | Done on `feat/h1-runtime-foundation` (host build, vitest, oxlint, JSDoc, per-file 100% coverage). |
+| 2 | Complete Executive action chain. | Done: policy → simulation → resolution → audit → execute → verify. |
+| 3 | Real Linux event ingestion with attention/state updates. | Partial: eventd ingestion, attention and snapshot seeding exist; NATS wiring and the live-event reducer do not. |
+| 4 | Persistent task/checkpoint recovery. | Not started (H3). |
+| 5 | One native/local model provider. | Done: `ModeldModelProvider`, and `OpenAICompatibleModelProvider` against the ARIS Intelligence llama.cpp server. Not yet run against a live server. |
+| 6 | One external model or agent provider through the same routing architecture. | Partial: `OpenAICompatibleModelProvider` with `locality: 'remote'` routes through `ModelRouter`; no agent adapter. |
+| 7 | SCOS Memory connected through `MemoryPort`. | Blocked on ARIS A5. |
+| 8 | One privileged OS action via ARIS System Executor. | Blocked on ARIS A2. |
+| 9 | Trace/audit reconstruction of why the action occurred. | Partial: Executive and `model.attempt` audit records share `traceId`/`requestId`; no durable trace store. |
+| 10 | Provider swap does not alter ARIS authority semantics. | Done by construction: providers return proposals only; `ModelRouter` never executes tool calls. |
 
-## 25. First live Harness test
+## 26. First live Harness test
 
 Target vertical slice:
 
@@ -675,17 +729,17 @@ NetworkManager connectivity loss
 
 This is the first proof that Harness is a cognitive runtime rather than a chat framework fork.
 
-## 26. Immediate work sequence
+## 27. Immediate work sequence
 
-1. finish private ARIS workspace/release-policy handling.
-2. finish static repository gates.
-3. merge the current runtime skeleton when green.
-4. add persistent checkpoints and durable scheduler.
-5. integrate ARIS OS local IPC/executor boundary.
-6. connect ARIS Intelligence.
-7. connect SCOS Memory.
-8. run the first full Wi-Fi recovery vertical slice.
+1. Merge `feat/h1-runtime-foundation` and the sibling-integration work (providers, router, eventd ingestion) when green.
+2. Write the H0 KEEP/WRAP/REPLACE/DROP audit of inherited packages.
+3. Add the `aris-harness` service entry point: NATS subscription on `aris.v1.>`, world-state seeding at start, attention wake-ups, provider health refresh, and systemd unit alignment with ARIS phase A1.
+4. Add the live-event state reducer and persistent checkpoints with a durable scheduler (H2/H3).
+5. Run both model providers against a live ARIS Intelligence llama.cpp server and a live `aris-modeld`, and record the result.
+6. Agree the executor `ActionRequest` protocol with ARIS A2 and the `MemoryPort` protocol with ARIS A5, then implement the Harness side (H6/H7).
+7. Build the cognition loop and planner over `ModelRouter` (H4).
+8. Run the first full Wi-Fi recovery vertical slice (§26).
 
-## 27. Definition of success
+## 28. Definition of success
 
 This repository succeeds when ARIS can continuously understand relevant state, form and manage goals, reason through replaceable intelligence, safely invoke capabilities, verify effects, recover interrupted work, learn validated procedures and extend across machines without any model or agent becoming the system authority.

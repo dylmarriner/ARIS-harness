@@ -254,6 +254,9 @@ export interface BeliefEdge {
   readonly relation: string
 }
 
+/** Where a model runs; `local` models never send request content off the host. */
+export type ModelLocality = 'local' | 'remote'
+
 /** Model provider feature flags. */
 export interface ModelCapabilities {
   /** Text generation. */
@@ -262,30 +265,129 @@ export interface ModelCapabilities {
   readonly vision: boolean
   /** Structured tool calls. */
   readonly tools: boolean
+  /** JSON output constrained by a response schema. */
+  readonly structuredOutput: boolean
   /** Embedding output. */
   readonly embeddings: boolean
+  /** Where the model runs. */
+  readonly locality: ModelLocality
   /** Context window in tokens, when known. */
   readonly maxContextTokens?: number
 }
 
-/** Structured model request; providers translate it to their wire format. */
+/** Tool the model may propose calling; proposals carry no execution authority. */
+export interface ModelToolDefinition {
+  /** Tool name the model uses in a call. */
+  readonly name: string
+  /** Model-facing description. */
+  readonly description: string
+  /** JSON Schema of the call arguments. */
+  readonly inputSchema: Readonly<Record<string, unknown>>
+}
+
+/** Tool call the model proposed. */
+export interface ModelToolCall {
+  /** Provider-assigned call id, echoed by the answering `tool` message. */
+  readonly id: string
+  /** Proposed tool name. */
+  readonly name: string
+  /** Parsed call arguments. */
+  readonly arguments: Readonly<Record<string, unknown>>
+}
+
+/** One prior conversational turn in a multi-step model exchange. */
+export interface ModelMessage {
+  /** Speaker role. */
+  readonly role: 'system' | 'user' | 'assistant' | 'tool'
+  /** Message text. */
+  readonly content: string
+  /** Optional participant name. */
+  readonly name?: string
+  /** Call id a `tool` message answers. */
+  readonly toolCallId?: string
+  /** Calls an `assistant` message proposed. */
+  readonly toolCalls?: readonly ModelToolCall[]
+}
+
+/** Resource limits for one model call. */
+export interface ModelBudget {
+  /** Maximum generated tokens. */
+  readonly maxOutputTokens: number
+  /** Wall-clock limit for the call in milliseconds. */
+  readonly timeoutMs: number
+  /** Sampling temperature; omitted uses the backend default. */
+  readonly temperature?: number
+}
+
+/**
+ * Structured model request; providers translate it to their wire format.
+ *
+ * `context` stays structured until a provider serializes it, so runtime state
+ * is never pre-rendered into prompt text by callers.
+ */
 export interface ModelRequest {
-  /** Why the model is being called. */
+  /** Correlates the call with the audit trail. */
+  readonly requestId: string
+  /** Trace shared by every record the triggering work produces. */
+  readonly traceId: string
+  /** Why the model is being called; recorded, not sent. */
   readonly purpose: string
-  /** Primary input. */
+  /** Instructions sent as the system message, when present. */
+  readonly system?: string
+  /** Primary input, sent as the final user message. */
   readonly input: string
   /** Scoped structured context. */
   readonly context: Readonly<Record<string, unknown>>
+  /** Earlier turns of this exchange, oldest first. */
+  readonly history?: readonly ModelMessage[]
+  /** Tools the model may propose calling. */
+  readonly tools?: readonly ModelToolDefinition[]
+  /** JSON Schema the output must satisfy; its presence requests structured output. */
+  readonly responseSchema?: Readonly<Record<string, unknown>>
+  /** Limits for this call. */
+  readonly budget: ModelBudget
+}
+
+/** Token accounting reported by a provider. */
+export interface ModelUsage {
+  /** Prompt tokens. */
+  readonly inputTokens: number
+  /** Generated tokens. */
+  readonly outputTokens: number
 }
 
 /** Model output. */
 export interface ModelResponse {
   /** Provider that produced the output. */
   readonly providerId: string
-  /** Generated output. */
+  /** Backend model that produced the output. */
+  readonly modelId: string
+  /** Generated text. */
   readonly output: string
-  /** Provider-specific metadata such as usage. */
+  /** Separate reasoning text, when the backend reports it. */
+  readonly reasoning?: string
+  /** Parsed JSON output when the request carried a `responseSchema`. */
+  readonly structured?: unknown
+  /** Proposed tool calls; empty when none. */
+  readonly toolCalls: readonly ModelToolCall[]
+  /** Backend finish reason. */
+  readonly finishReason: string
+  /** Token accounting. */
+  readonly usage: ModelUsage
+  /** Wall-clock call duration in milliseconds. */
+  readonly latencyMs: number
+  /** Provider-specific metadata. */
   readonly metadata: Readonly<Record<string, unknown>>
+}
+
+/** Provider reachability and served models. */
+export interface ModelProviderHealth {
+  /** Whether the provider can serve requests. */
+  readonly available: boolean
+  /** Model ids the backend reports serving. */
+  readonly models: readonly string[]
+  /** Failure or status detail. */
+  readonly detail?: string
 }
 
 /** Policy decision for one action. */

@@ -3,7 +3,7 @@
 import type { ModelProvider } from '../ports.ts'
 
 /** Model feature flag a provider can be selected by. */
-export type ModelFeature = 'text' | 'vision' | 'tools' | 'embeddings'
+export type ModelFeature = 'text' | 'vision' | 'tools' | 'structuredOutput' | 'embeddings'
 
 /** Registry that selects providers by feature, never by brand. */
 export class ModelRegistry {
@@ -42,6 +42,15 @@ export class ModelRegistry {
    * @returns Providers whose capabilities enable `feature`.
    */
   supporting(feature: ModelFeature): readonly ModelProvider[] {
-    return [...this.providers.values()].filter(provider => provider.capabilities[feature])
+    return this.list().filter(provider => provider.capabilities[feature])
+  }
+
+  /**
+   * List every provider.
+   *
+   * @returns Providers in registration order.
+   */
+  list(): readonly ModelProvider[] {
+    return [...this.providers.values()]
   }
 }

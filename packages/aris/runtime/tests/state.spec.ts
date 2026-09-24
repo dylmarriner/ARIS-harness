@@ -106,8 +106,9 @@ describe('ModelRegistry', () => {
     const registry = new ModelRegistry()
     const provider = (id: string, vision: boolean): ModelProvider => ({
       id,
-      capabilities: { text: true, vision, tools: false, embeddings: false },
-      generate: async () => ({ providerId: id, output: '', metadata: {} }),
+      capabilities: { text: true, vision, tools: false, structuredOutput: false, embeddings: false, locality: 'local' },
+      generate: async () => ({ providerId: id, modelId: id, output: '', toolCalls: [], finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: 0, metadata: {} }),
+      health: async () => ({ available: true, models: [id] }),
     })
     const local = provider('local', false)
     registry.register(local)
@@ -115,6 +116,7 @@ describe('ModelRegistry', () => {
 
     expect(registry.supporting('text').map(next => next.id)).toEqual(['local', 'remote'])
     expect(registry.supporting('vision').map(next => next.id)).toEqual(['remote'])
+    expect(registry.list().map(next => next.id)).toEqual(['local', 'remote'])
     expect(() => registry.register(provider('local', true))).toThrow('model provider already registered: local')
 
     dispose()

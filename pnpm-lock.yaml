@@ -1227,6 +1227,10 @@ importers:
         version: link:../../util/workspace-path
 
   packages/aris/runtime:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@deepseek-ai/dsh-agent':
         specifier: workspace:^

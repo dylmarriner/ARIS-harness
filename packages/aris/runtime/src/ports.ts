@@ -6,6 +6,7 @@ import type {
   AuthorizationDecision,
   Goal,
   ModelCapabilities,
+  ModelProviderHealth,
   ModelRequest,
   ModelResponse,
   Plan,
@@ -29,6 +30,13 @@ export interface ModelProvider {
    * @returns The provider response.
    */
   generate(request: ModelRequest, signal?: AbortSignal): Promise<ModelResponse>
+  /**
+   * Probe reachability; transport failures resolve as unavailable instead of rejecting.
+   *
+   * @param signal - Aborts the probe.
+   * @returns Current health.
+   */
+  health(signal?: AbortSignal): Promise<ModelProviderHealth>
 }
 
 /** Executes actions for the capabilities it advertises. */
