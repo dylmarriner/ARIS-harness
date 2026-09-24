@@ -55,8 +55,13 @@ const publishedRepositoryUrl = 'git+https://github.com/deepseek-ai/deepseek-harn
 const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for experimental packages. */
 const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
+/** ARIS-owned packages; the fork policy keeps them out of every DeepSeek release sequence. */
+const arisPackageDirectory = /^packages\/aris\/[^/]+$/
+/** npm scope reserved for ARIS-owned packages; outside the name-based dsh release family. */
+const arisPackageNamePrefix = '@aris-os/'
 /** Ordinary directories whose packages this repository publishes: one release member each. */
-const standardReleaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/(?!desktop(?:-host)?$)[^/]+|vendor\/[^/]+)$/
+const standardReleaseMemberDirectory =
+  /^(?:packages\/(?!experimental\/|aris\/)[^/]+\/[^/]+|apps\/(?!desktop(?:-host)?$)[^/]+|vendor\/[^/]+)$/
 /** Installable application assembled by electron-builder rather than published to npm. */
 const desktopApplicationDirectory = 'apps/desktop'
 const localArtifactDirs = new Set(['node_modules'])
@@ -288,6 +293,23 @@ export function checkExperimentalManifest({ dir, manifest }: WorkspaceManifest):
   return errors
 }
 
+/**
+ * ARIS-owned manifest requirements: private, unpublished, and outside the dsh name family.
+ * @param workspace - package directory and parsed manifest.
+ * @returns path-qualified policy violations.
+ */
+export function checkArisManifest({ dir, manifest }: WorkspaceManifest): string[] {
+  if (!arisPackageDirectory.test(dir)) return []
+  const label = manifest.name ?? dir
+  const errors: string[] = []
+  if (manifest.name?.startsWith(arisPackageNamePrefix) !== true) {
+    errors.push(`${label}: ARIS package name must start with ${JSON.stringify(arisPackageNamePrefix)}`)
+  }
+  if (manifest.private !== true) errors.push(`${label}: ARIS package must set "private": true`)
+  if (manifest.publishConfig !== undefined) errors.push(`${label}: ARIS package must omit publishConfig`)
+  return errors
+}
+
 function isReleaseMemberDirectory(dir: string): boolean {
   return standardReleaseMemberDirectory.test(dir) || isPublicExperimentalPackageDirectory(dir)
 }
@@ -320,7 +342,7 @@ export function checkDshFamilyVersion(manifest: PackageManifest, expected: strin
  * @returns path-qualified policy violations.
  */
 export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): string[] {
-  const errors = checkExperimentalManifest({ dir, manifest })
+  const errors = [...checkExperimentalManifest({ dir, manifest }), ...checkArisManifest({ dir, manifest })]
   const label = manifest.name ?? dir
   const familyVersionError = checkDshFamilyVersion(manifest, repositoryVersion)
   if (familyVersionError !== undefined) errors.push(familyVersionError)
@@ -363,7 +385,7 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
       || manifest.repository.directory !== dir) {
       errors.push(`${label}: release member repository must use ${publishedRepositoryUrl} with directory ${dir}`)
     }
-  } else if (!experimentalPackageDirectory.test(dir) && manifest.private !== true) {
+  } else if (!experimentalPackageDirectory.test(dir) && !arisPackageDirectory.test(dir) && manifest.private !== true) {
     errors.push(`${label}: package.json must set "private": true`)
   }
 
