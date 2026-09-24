@@ -1,12 +1,12 @@
 # ARIS Harness
 
-**ARIS Harness** is the plugin-oriented execution and integration harness for the ARIS ecosystem. This repository is derived from DeepSeek Harness and retains its everything-is-a-plugin architecture, while ARIS-specific integration is layered on top.
+**ARIS Harness** is the native cognitive runtime and integration harness for the ARIS ecosystem. This repository is derived from DeepSeek Harness and retains its composable plugin foundation, while ARIS-owned runtime logic is layered above inherited provider and execution seams.
 
-ARIS has a native local cognitive model of **≤1 billion parameters**. That native model is ARIS's default brain. ARIS Harness exists to help that brain and the wider ARIS runtime invoke additional capabilities without hard-coding one provider, model family or agent ecosystem.
+ARIS has a small, permanently available local cognitive model. That model is an important native intelligence component, but it is not the runtime itself. ARIS Harness owns the persistent execution loop, typed system state, goals, authority chain, capability discovery, orchestration, verification and integration boundaries that let ARIS use whatever intelligence and tools are appropriate.
 
-The ≤1B limit applies only to the native ARIS model. ARIS Harness may expose or orchestrate:
+ARIS Harness may expose or orchestrate:
 
-- larger local models
+- native and larger local models
 - remote GPU-hosted models
 - OpenAI-compatible endpoints
 - OpenAI / Codex
@@ -17,38 +17,49 @@ The ≤1B limit applies only to the native ARIS model. ARIS Harness may expose o
 - ACP agents
 - A2A peers
 - MCP tools and servers
-- future agent/model protocols through plugins
+- operating-system and device capabilities
+- future agent/model protocols through explicit adapters
 
 ## Role inside ARIS
 
 ```text
-                 ARIS
-          native ≤1B brain
-                 │
-                 ▼
-          ARIS Core / Policy
-                 │
-                 ▼
-           ARIS Harness
-                 │
-     ┌───────────┼────────────┐
-     ▼           ▼            ▼
-  Models      CLI/ACP       A2A/MCP
-  & APIs       Agents       Capabilities
+                         ARIS OS
+                            │
+                            ▼
+                   ┌─────────────────┐
+                   │  ARIS Harness   │
+                   │                 │
+                   │ Executive       │
+                   │ Runtime/session │
+                   │ Goals/planning  │
+                   │ World model     │
+                   │ Policy/verify   │
+                   │ Events/memory   │
+                   └────────┬────────┘
+                            │
+          ┌─────────────────┼─────────────────┐
+          ▼                 ▼                 ▼
+      Models/LLMs       Tools/OS          Agents/nodes
+      local/remote      MCP/native        ACP/A2A/CLI
 ```
 
-ARIS owns the task, identity, memory, policy, permissions and durable state. Harness plugins are execution/adaptation boundaries. An external model or agent can provide stronger reasoning, specialist knowledge, coding ability or remote compute, but it does not become ARIS's controlling identity.
+The key rule is simple: **models propose; the runtime owns authority sequencing.** A model, external agent or remote node can provide stronger reasoning, specialist knowledge, coding ability or compute, but it does not become ARIS's controlling identity and cannot bypass the deterministic execution chain.
 
-The harness should therefore preserve:
+The ARIS-owned runtime foundation is developed under `packages/aris/runtime`. The repository-specific architecture is documented in [ARIS Harness Technical Blueprint and Phased Roadmap](docs/ARIS_HARNESS_TECHNICAL_BLUEPRINT_AND_ROADMAP.md). The active implementation sequence for the native runtime is maintained alongside that architecture as implementation work lands.
+
+The runtime preserves:
 
 - provider and agent replaceability
-- explicit capability boundaries
+- typed subsystem boundaries
+- explicit capability discovery and health
 - scoped context handoff
-- provenance for delegated work
-- cancellation/time/resource limits
+- provenance and confidence for durable beliefs
+- policy and permission gates before execution
+- impact simulation for meaningful mutations
 - structured result and artifact return
-- verification hooks
-- health/fallback semantics
+- post-action verification
+- audit/replay/recovery semantics
+- cancellation/time/resource limits
 - local-first/offline operation where possible
 
 ## Upstream foundation
@@ -87,11 +98,11 @@ pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` currently uses the inherited DeepSeek Harness CLI while ARIS integration evolves.
+`pnpm run build` prepares the repository artifacts. `pnpm dsh web` currently uses the inherited DeepSeek Harness CLI while the ARIS-native runtime is integrated phase-by-phase.
 
 ## Development
 
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
+Start with the [development guide](docs/development.md), [architecture documentation](docs/architecture.md), and [ARIS Harness Technical Blueprint and Phased Roadmap](docs/ARIS_HARNESS_TECHNICAL_BLUEPRINT_AND_ROADMAP.md).
 
 For agents, follow [AGENTS.md](AGENTS.md).
 
