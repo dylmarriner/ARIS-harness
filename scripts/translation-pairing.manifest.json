@@ -3,11 +3,15 @@
     ".agents/notes/AGENTS.md",
     ".agents/notes/implemented/AGENTS.md",
     ".agents/notes/implemented/CLAUDE.md",
+    ".agents/notes/implemented/architecture/2026-09-24-aris-runtime-foundation.md",
+    ".agents/notes/implemented/architecture/2026-09-24-aris-sibling-repository-integration.md",
     ".github/review-ownership/README.md",
     "docs/AGENTS.md",
+    "docs/ARIS_HARNESS_TECHNICAL_BLUEPRINT_AND_ROADMAP.md",
     "docs/cordis-api/inherited.md",
     "docs/i18n/style-samples.md",
     "docs/i18n/terminology.md",
-    "docs/i18n/translation-prompt.md"
+    "docs/i18n/translation-prompt.md",
+    "packages/aris/"
   ]
 }

@@ -1,7 +1,8 @@
-/** Experimental-package publication and dependency constraints. */
+/** Experimental- and ARIS-package publication and dependency constraints. */
 
 import { describe, expect, it } from 'vitest'
 import {
+  checkArisManifest,
   checkDshFamilyVersion,
   checkExperimentalDependencyIsolation,
   checkExperimentalManifest,
@@ -21,6 +22,29 @@ const publicExperimental: WorkspaceManifest = {
     publishConfig: { access: 'public' },
   },
 }
+
+describe('ARIS workspace constraints', () => {
+  const aris: WorkspaceManifest = {
+    dir: 'packages/aris/runtime',
+    manifest: { name: '@aris-os/harness-runtime', private: true },
+  }
+
+  it('keeps ARIS packages private and outside the dsh name family', () => {
+    expect(checkArisManifest(aris)).toEqual([])
+    expect(checkArisManifest({
+      ...aris,
+      manifest: { name: '@deepseek-ai/dsh-aris-runtime', publishConfig: { access: 'public' } },
+    })).toEqual([
+      '@deepseek-ai/dsh-aris-runtime: ARIS package name must start with "@aris-os/"',
+      '@deepseek-ai/dsh-aris-runtime: ARIS package must set "private": true',
+      '@deepseek-ai/dsh-aris-runtime: ARIS package must omit publishConfig',
+    ])
+  })
+
+  it('ignores packages outside packages/aris', () => {
+    expect(checkArisManifest({ dir: 'packages/core/agent', manifest: { name: '@deepseek-ai/dsh-agent' } })).toEqual([])
+  })
+})
 
 describe('experimental workspace constraints', () => {
   it('requires the experimental package-name prefix', () => {
